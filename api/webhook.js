@@ -1,6 +1,8 @@
 import { google } from "googleapis";
 
 export default async function handler(req, res) {
+  console.log("BODY RECEBIDO:", req.body);
+  
   if (req.method !== "POST") {
     return res.status(405).send("Method Not Allowed");
   }
