@@ -2,6 +2,7 @@ import { google } from "googleapis";
 
 export default async function handler(req, res) {
   console.log("BODY RECEBIDO:", req.body);
+  console.log("STORE:", req.body.store_name);
   
   if (req.method !== "POST") {
     return res.status(405).send("Method Not Allowed");
