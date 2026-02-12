@@ -6,68 +6,54 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 🔹 Garantir que o body existe
     const data = req.body;
 
-    if (!data) {
-      console.error("Body vazio");
-      return res.status(400).send("No body received");
-    }
-
-    // 🔹 Só processa vendas aprovadas
-    if (data.status !== "approved") {
+    if (!data || data.status !== "approved") {
       return res.status(200).send("IGNORED");
     }
 
-    // 🔹 Validar variáveis de ambiente
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY não definida");
-    }
+    // 🔹 Converte data para horário do Brasil
+    const date = new Date(data.created_at);
 
-    if (!process.env.GOOGLE_SHEETS_ID) {
-      throw new Error("GOOGLE_SHEETS_ID não definida");
-    }
+    const brasilDate = new Date(
+      date.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
+    );
 
-    // 🔹 Parse seguro das credenciais
-    let credentials;
-    try {
-      credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-    } catch (err) {
-      console.error("Erro ao fazer parse da GOOGLE_SERVICE_ACCOUNT_KEY");
-      throw err;
-    }
+    const formattedDate =
+      brasilDate.getDate().toString().padStart(2, "0") + "/" +
+      (brasilDate.getMonth() + 1).toString().padStart(2, "0") + "/" +
+      brasilDate.getFullYear() + " " +
+      brasilDate.getHours().toString().padStart(2, "0") + ":" +
+      brasilDate.getMinutes().toString().padStart(2, "0") + ":" +
+      brasilDate.getSeconds().toString().padStart(2, "0");
 
-    // 🔹 Autenticação Google
+    const paymentMethod = data.method || "";
+    const totalPrice = parseFloat(data.total_price);
+
     const auth = new google.auth.GoogleAuth({
-      credentials,
+      credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
     const sheets = google.sheets({ version: "v4", auth });
 
-    // 🔹 Preparar dados para planilha
-    const values = [[
-      new Date(data.created_at),
-      data.method || "",
-      parseFloat(data.total_price)
-    ]];
-
-    // 🔹 Inserir nova linha automaticamente na próxima disponível
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.GOOGLE_SHEETS_ID,
       range: "VENDAS_RAW!A:C",
       valueInputOption: "USER_ENTERED",
       requestBody: {
-        values,
+        values: [[
+          formattedDate,
+          paymentMethod,
+          totalPrice
+        ]],
       },
     });
-
-    console.log("Venda adicionada:", values);
 
     return res.status(200).send("SUCCESS");
 
   } catch (error) {
-    console.error("Erro no webhook:", error);
+    console.error(error);
     return res.status(500).send("ERROR");
   }
 }
