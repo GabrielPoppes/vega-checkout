@@ -1,5 +1,12 @@
 import { google } from "googleapis";
 
+const STORE_SHEETS = {
+  "Compra Segura": "1NPjRpJb6oIksiVPpCJOHC1nxgnzxwMHP_OowMen56yE",
+  "Pagamento Seguro": "1mXYkWjJKmJQaP327RL4YGUk4UtcroOguiMmNqydb_Kc",
+  "Projeto Gênio Brasil": "1UvpVKHAMpK6XswCC4a43u27-FepcBm_E5-Qg6Kx9ilg",
+  "Escola Pequeno Gênio": "11_PUCtLNRDLPqNURJLIDX4kqIPDVxvrs4u1WwCeKumU"
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).send("Method Not Allowed");
@@ -14,10 +21,15 @@ export default async function handler(req, res) {
       return res.status(200).send("IGNORED");
     }
 
+    const businessName = data.business_name;
     const saleCode = data.sale_code;
-    if (!saleCode) {
-      return res.status(200).send("SEM SALE_CODE");
+
+    if (!STORE_SHEETS[businessName]) {
+      console.log("LOJA NÃO MAPEADA:", businessName);
+      return res.status(200).send("STORE NOT FOUND");
     }
+
+    const spreadsheetId = STORE_SHEETS[businessName];
 
     const auth = new google.auth.GoogleAuth({
       credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY),
@@ -26,12 +38,10 @@ export default async function handler(req, res) {
 
     const sheets = google.sheets({ version: "v4", auth });
 
-    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
-
-    // 🔎 Buscar vendas já existentes
+    // 🔎 Verifica duplicidade
     const existing = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "VENDAS_RAW!D:D", // Coluna D guardará sale_code
+      range: "VENDAS_RAW!D:D",
     });
 
     const existingCodes = existing.data.values?.flat() || [];
@@ -41,7 +51,7 @@ export default async function handler(req, res) {
       return res.status(200).send("DUPLICATE");
     }
 
-    // 💰 Corrigir valor (centavos → reais)
+    // 💰 Corrige centavos
     const totalPrice = Number(data.total_price) / 100;
 
     const createdAt = new Date(data.created_at);
@@ -64,6 +74,8 @@ export default async function handler(req, res) {
         values,
       },
     });
+
+    console.log("VENDA INSERIDA EM:", businessName);
 
     return res.status(200).send("SUCCESS");
 
